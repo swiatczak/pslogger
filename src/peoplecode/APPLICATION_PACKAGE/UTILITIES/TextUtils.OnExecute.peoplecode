@@ -1,0 +1,384 @@
+import UTILITIES:Logger;
+
+/* Class: TextUtils
+   Collection of utilities related to processing texts, some too specific, maybe.
+*/
+class TextUtils
+   method arrayToString(&pArray As array of any, &pArray2 As array of array of any) Returns string;
+   method ciCollectionToString(&collData As ApiObject, &coll As ApiObject, &prefix As string) Returns string;
+   method ciToString(&ci As ApiObject) Returns string;
+   method ciFieldToString(&dataItem As any, &fld As ApiObject, &prefix As string) Returns string;
+   
+   method rowsetToStringFiltered(&rs As Rowset, &recNameFilter As string) Returns string;
+   method rowsetToString(&rs As Rowset) Returns string;
+   method rowToString(&row As Row, &recNameFilter As string) Returns string;
+   method recordToString(&record As Record, &recNameFilter As string) Returns string;
+   
+   method stripSpecialChar(&dataItem As string) Returns string;
+   
+   property string targetFolder;
+   property number pathType;
+   property boolean fileDecorator;
+end-class;
+
+
+/* Method: arrayToString
+   convert array(s) to String
+
+   Parameters:
+   pArray - Array of Any
+   pArray2 - Array2 of Any 
+
+    Returns:
+    String -
+*/
+method arrayToString
+   /+ &pArray as Array of Any, +/
+   /+ &pArray2 as Array2 of Any +/
+   /+ Returns String +/
+   Local string &returnValue = "";
+   Local integer &idx_dataRow1;
+   Local integer &idx_dataRow2;
+   
+   If &pArray2 <> Null Or
+         &pArray <> Null Then
+      If &pArray2 <> Null Then
+         &returnValue = &pArray2.Join(", ", "[", "]");
+      Else
+         If &pArray <> Null Then
+            &returnValue = &pArray.Join(", ");
+         Else
+            &returnValue = "[No Data Found]";
+         End-If;
+      End-If;
+      
+      
+   End-If;
+   Return &returnValue;
+end-method;
+
+/* Method: ciCollectionToString
+   convert content of the Component Interface Collection to String
+
+   Parameters:
+   collData - as ApiObject - data collection
+   coll - as ApiObject - property collection
+   prefix - as String - padding/indentation string 
+
+   Returns:
+   String  
+
+*/
+method ciCollectionToString
+   /+ &collData as ApiObject, +/
+   /+ &coll as ApiObject, +/
+   /+ &prefix as String +/
+   /+ Returns String +/
+   Local integer &idx_collData;
+   Local ApiObject &currentItem;
+   Local ApiObject &currentDataColl;
+   Local ApiObject &currentDataCollItem;
+   Local any &currentDataItem;
+   Local string &returnValue = "";
+   Local ApiObject &colList;
+   Local integer &idx_colItem;
+   &returnValue = "";
+   
+   For &idx_collData = 1 To &coll.count
+      &currentItem = &coll.item(&idx_collData);
+      If (&currentItem.isCollection) Then
+         rem &currentDataColl = &collData.item(&idx_collData);
+         If &collData <> Null And
+               &currentItem <> Null Then
+            try
+               If &collData.getPropertyByName(String(&currentItem.Name)).count > 0 Then
+                  &returnValue = &returnValue | "<" | &currentItem.Name | "1>" | Char(10);
+                  
+                  
+                  If &collData <> Null Then
+                     &colList = &collData.getPropertyByName(String(&currentItem.Name));
+                  Else
+                     &currentDataColl = Null;
+                  End-If;
+                  If &colList.count > 0 Then
+                     For &idx_colItem = 1 To &colList.count
+                        &currentDataColl = &colList.item(&idx_colItem);
+                        &returnValue = &returnValue | "<" | &currentItem.Name | ">" | Char(10);
+                        &returnValue = &returnValue | %This.ciCollectionToString(&currentDataColl, &currentItem.PropertyInfoCollection, &prefix);
+                        &returnValue = &returnValue | "</" | &currentItem.Name | ">" | Char(10);
+                     End-For;
+                  End-If;
+                  &returnValue = &returnValue | "</" | &currentItem.Name | "1>" | Char(10);
+               End-If;
+            catch Exception &fexc
+               
+            end-try;
+         End-If;
+      Else
+         &currentDataItem = &collData.GetPropertyByName(String(&currentItem.Name));
+         &returnValue = &returnValue | %This.ciFieldToString(&currentDataItem, &currentItem, &prefix);
+      End-If;
+   End-For;
+   
+   Return &returnValue;
+end-method;
+
+/* Method: ciFieldToString
+   convert content of the Field item to String
+
+   Parameters:
+   dataItem - as Any - field item
+   fld - as ApiObject - property collection item
+   prefix - as String - padding/indentation string 
+
+   Returns:
+   String
+*/
+method ciFieldToString
+   /+ &dataItem as Any, +/
+   /+ &fld as ApiObject, +/
+   /+ &prefix as String +/
+   /+ Returns String +/
+   Local string &returnValue = "";
+   If All(&dataItem) Then
+      &returnValue = &returnValue | "<" | &fld.Name | ">" | &dataItem | "</" | &fld.Name | ">" | Char(10);
+   Else
+      &returnValue = &returnValue | "<" | &fld.Name | "/>" | Char(10);
+   End-If;
+   Return &returnValue;
+end-method;
+
+
+/* Method: ciToString
+   convert content/structure of the Component Interface to String
+
+   Parameters:
+   ci - as ApiObject - instantiated Component Interface
+   
+   Returns:
+   String
+*/
+method ciToString
+   /+ &ci as ApiObject +/
+   /+ Returns String +/
+   Local string &returnValue = "";
+   Local ApiObject &rootPropInfoColl2;
+   
+   If &ci <> Null Then
+      rem &rootPropInfoColl = %This.ciCCON;
+      Local string &curentDocText;
+      Local XmlDoc &doc;
+      &rootPropInfoColl2 = &ci.PropertyInfoCollection;
+      &returnValue = %This.ciCollectionToString(&ci, &rootPropInfoColl2, "");
+      &curentDocText = "<?xml version=""1.0""?>";
+      &curentDocText = &curentDocText | "<" | &ci.ComponentName | ">";
+      &curentDocText = &curentDocText | &returnValue;
+      &curentDocText = &curentDocText | "</" | &ci.ComponentName | ">";
+      try
+         &doc = CreateXmlDoc(&curentDocText);
+         &returnValue = &doc.GenFormattedXmlString();
+      catch Exception &ex
+         &returnValue = &curentDocText;
+      end-try;
+   End-If;
+   Return &returnValue;
+end-method;
+
+method rowsetToStringFiltered
+   /+ &rs as Rowset, +/
+   /+ &recNameFilter as String +/
+   /+ Returns String +/
+   rem &rs As Rowset, &recName as String) Returns string;
+   Local string &returnValue;
+   
+   Local integer &idx_dataRow;
+   
+   &returnValue = Char(10) | "[";
+   
+   If &rs <> Null Then
+      
+      &returnValue = &returnValue | "{Rowset - Level [" | &rs.Level | "], Name [" | &rs.Name | "], Rows [" | &rs.ActiveRowCount | "]}";
+      For &idx_dataRow = 1 To &rs.ActiveRowCount
+         &returnValue = &returnValue | Char(10) | "[";
+         &returnValue = &returnValue | %This.rowToString(&rs.GetRow(&idx_dataRow), &recNameFilter);
+         &returnValue = &returnValue | "]";
+      End-For;
+   End-If;
+   &returnValue = &returnValue | "]";
+   
+   Return &returnValue;
+end-method;
+
+/* Method: rowsetToString
+   convert Rowset to String
+
+   Parameters:
+   rs - as Rowset   
+
+   Returns:
+   String
+*/
+method rowsetToString
+   /+ &rs as Rowset +/
+   /+ Returns String +/
+   Return %This.rowsetToStringFiltered(&rs, "");
+end-method;
+
+/* Method: rowToString
+   convert Row to String
+
+   Parameters:
+   row - as Row   
+
+   Returns:
+   String
+*/
+method rowToString
+   /+ &row as Row, +/
+   /+ &recNameFilter as String +/
+   /+ Returns String +/
+   Local string &returnValue = "";
+   
+   Local integer &idx_dataRow;
+   If &row <> Null Then
+      /* process rows */
+      &returnValue = &returnValue | "{[ROWNUM:" | &row.RowNumber | "[";
+      
+      If &row.IsDeleted Then
+         &returnValue = &returnValue | "D";
+      Else
+         &returnValue = &returnValue | "_";
+      End-If;
+      
+      If &row.IsChanged Then
+         &returnValue = &returnValue | "C";
+      Else
+         &returnValue = &returnValue | "_";
+      End-If;
+      
+      If &row.IsNew Then
+         &returnValue = &returnValue | "N";
+      Else
+         &returnValue = &returnValue | "_";
+      End-If;
+      
+      If &row.Visible Then
+         &returnValue = &returnValue | "V";
+      Else
+         &returnValue = &returnValue | "_";
+      End-If;
+      
+      &returnValue = &returnValue | "]";
+      
+      For &idx_dataRow = 1 To &row.RecordCount
+         &returnValue = &returnValue | %This.recordToString(&row.GetRecord(&idx_dataRow), &recNameFilter);
+      End-For;
+      &returnValue = &returnValue | "} {";
+      /* process rowsets */
+      For &idx_dataRow = 1 To &row.ChildCount
+         &returnValue = &returnValue | %This.rowsetToStringFiltered(&row.GetRowset(&idx_dataRow), &recNameFilter);
+      End-For;
+      &returnValue = &returnValue | "}";
+   End-If;
+   
+   Return &returnValue;
+end-method;
+
+/* Method: recordToString
+   convert Record to String
+
+   Parameters:
+   record - as Record   
+
+   Returns:
+   String
+*/
+method recordToString
+   /+ &record as Record, +/
+   /+ &recNameFilter as String +/
+   /+ Returns String +/
+   Local string &returnValue;
+   Local integer &idx_dataRow;
+   If &record <> Null Then
+      /* process fields */
+      If (&record.Name = &recNameFilter) Or
+            (&recNameFilter = "") Then
+         &returnValue = Char(10) | "[{[";
+         If &record.IsDeleted Then
+            &returnValue = &returnValue | "D";
+         Else
+            &returnValue = &returnValue | "_";
+         End-If;
+         
+         If &record.IsChanged Then
+            &returnValue = &returnValue | "C";
+         Else
+            &returnValue = &returnValue | "_";
+         End-If;
+         
+         &returnValue = &returnValue | "] Name:" | &record.Name | "}:";
+         For &idx_dataRow = 1 To &record.FieldCount
+            Local Field &fld = &record.GetField(&idx_dataRow);
+            Local any &val = "";
+            If &fld.IsInBuf Then
+               If &idx_dataRow > 1 Then
+                  &returnValue = &returnValue | ", ";
+               End-If;
+               &val = &fld.Value;
+               
+               If &fld.IsChanged Then
+                  &returnValue = &returnValue | "[C]:";
+               Else
+                  &returnValue = &returnValue | "[_]:";
+               End-If;
+               
+               If All(&val) Then
+                  &returnValue = &returnValue | &fld.Name | ":" | String(&val);
+               Else
+                  &returnValue = &returnValue | &fld.Name | ":";
+               End-If;
+            End-If;
+         End-For;
+         &returnValue = &returnValue | "]";
+      End-If;
+   End-If;
+   
+   Return &returnValue;
+end-method;
+
+
+/**********************************
+ Method: stripSpecialChar
+  Strips Special Characters from the passed string.
+ 
+ Parameters:
+   String - dataItem 
+
+ Returns:
+   Sting 
+
+ **********************************/
+method stripSpecialChar
+   /+ &dataItem as String +/
+   /+ Returns String +/
+   Local string &Alpha = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+   Local string &Numeric = "0123456789";
+   Local string &Special = "()&/#-";
+   Local string &Space = " ";
+   Local string &c;
+   Local number &DoubleQuote = 34;
+   Local number &i;
+   Local boolean &found;
+   
+   Local string &dataOut = "";
+   For &i = 1 To Len(&dataItem)
+      &c = Substring(&dataItem, &i, 1);
+      &found = (((Find(&c, &Alpha) + Find(&c, &Numeric) + Find(&c, &Special) + Find(&c, &Space)) > 0) Or
+         (Code(&c) = &DoubleQuote));
+      If (&found) Then
+         &dataOut = &dataOut | &c;
+      End-If;
+   End-For;
+   Return &dataOut;
+end-method;
+

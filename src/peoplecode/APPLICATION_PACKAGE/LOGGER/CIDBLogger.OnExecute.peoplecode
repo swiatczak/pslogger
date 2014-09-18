@@ -1,0 +1,29 @@
+import LOGGER:BaseDBLogger;
+import UTILITIES:TextUtils;
+
+class CIDBLogger extends LOGGER:BaseDBLogger;
+   method CIDBLogger(&pSrc As string, &pGrp As string, &pSubGrp As string, &pMarkerStr As string);
+   
+   method logCI(&ci As ApiObject);
+private
+   instance UTILITIES:TextUtilsUOA &txtUtils;
+end-class;
+
+method CIDBLogger
+   /+ &pSrc as String, +/
+   /+ &pGrp as String, +/
+   /+ &pSubGrp as String, +/
+   /+ &pMarkerStr as String +/
+   %Super = create LOGGER:BaseDBLogger(&pSrc, &pGrp, &pSubGrp, &pMarkerStr);
+end-method;
+
+method logCI
+   /+ &ci as ApiObject +/
+   
+   If &txtUtils = Null Then
+      &txtUtils = create UTILITIES:TextUtils();
+   End-If;
+   
+   %This.writeLog(&txtUtils.ciToString(&ci));
+end-method;
+

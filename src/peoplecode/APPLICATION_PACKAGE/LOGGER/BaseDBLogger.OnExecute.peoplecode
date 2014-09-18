@@ -1,0 +1,186 @@
+class BaseDBLogger
+   method BaseDBLogger(&pSrc As string, &pGrp As string, &pSubGrp As string, &pMarkerStr As string);
+   
+   method writeLog(&p_msg As string);
+   method writeLogLine(&p_msg As string);
+   
+   method setDefaults(&pSource As string, &pGroup As string, &pSubGroup As string);
+   
+   method reset();
+   method resetOperator(&pOperid As string);
+   method resetSource(&pSource As string);
+   
+   property string source;
+   property string group;
+   property string subgroup;
+   property string guid;
+   property string sessionid;
+   property string operator;
+   
+   property boolean dbLoggingEnabled;
+   property boolean enablePreHooks;
+   property boolean enablePostHooks;
+private
+   Constant &SINGLE_LINE_LIMIT = 3999;
+   
+   instance array of array of any &preHooks;
+   instance array of array of any &postHooks;
+   
+   instance boolean &blocked;
+   
+   method executeHooks(&pHooksArray As array of array of any, &pMsgStr As string);
+end-class;
+
+method BaseDBLogger
+   /+ &pSrc as String, +/
+   /+ &pGrp as String, +/
+   /+ &pSubGrp as String, +/
+   /+ &pMarkerStr as String +/
+   %This.enablePreHooks = False;
+   %This.enablePostHooks = False;
+   
+   %This.dbLoggingEnabled = True;
+   %This.setDefaults(&pSrc, &pGrp, &pSubGrp);
+   
+   If All(&pMarkerStr) Then
+      %This.writeLogLine(&pMarkerStr);
+   End-If;
+   
+   
+end-method;
+
+method writeLogLine
+   /+ &p_msg as String +/
+   If %This.dbLoggingEnabled = True Then
+      &blocked = False;
+      /* pre-hooks can stop the message from being written to the database if one of them returns false */
+      If %This.enablePreHooks = True Then
+         %This.executeHooks(&preHooks, &p_msg);
+      End-If;
+      try
+         /* if hooks not used - this should always pass through - otherwise one of the hooks prevented msg from being written to the DB */
+         If Not &blocked Then
+            If Len(LTrim(&p_msg)) > 0 Then
+               SQLExec("Exec GENRICLOG2.writeLogLine(:1,:2,:3,:4,:5, %TextIn(:6))", %This.source, %This.group, %This.subgroup, %This.operator, %This.guid, Left(&p_msg, &SINGLE_LINE_LIMIT));
+            End-If;
+         End-If;
+      catch Exception &ex
+      end-try;
+      If %This.enablePostHooks = True Then
+         %This.executeHooks(&postHooks, &p_msg);
+      End-If;
+   End-If;
+end-method;
+
+method writeLog
+   /+ &p_msg as String +/
+   Local string &msgStr = &p_msg;
+   
+   If %This.dbLoggingEnabled Then
+      While (Len(&msgStr) > &SINGLE_LINE_LIMIT)
+         /* trims the start of the message automatically - so no needed on first invocation */
+         %This.writeLog(&msgStr);
+         &msgStr = Substring(&msgStr, (&SINGLE_LINE_LIMIT + 1), Len(&msgStr) - &SINGLE_LINE_LIMIT);
+      End-While;
+      %This.writeLog(&msgStr);
+   End-If;
+   
+end-method;
+
+method resetOperator
+   /+ &pOperid as String +/
+   try
+      If %This.dbLoggingEnabled Then
+         SQLExec("DELETE FROM PS_GENRICLOG2 WHERE OPRID like :1", &pOperid);
+      End-If;
+   catch Exception &ex
+   end-try;
+   rem End-If;
+end-method;
+
+method resetSource
+   /+ &pSource as String +/
+   try
+      If %This.dbLoggingEnabled Then
+         SQLExec("DELETE FROM PS_GENRICLOG2 WHERE LOGMSGSRC like :1", &pSource);
+      End-If;
+   catch Exception &ex
+   end-try;
+end-method;
+
+method reset
+   /* reset logger record */
+   try
+      If %This.dbLoggingEnabled Then
+         SQLExec("TRUNCATE TABLE PS_GENRICLOG2");
+         SQLExec("Exec GENRICLOG2.resetSequenceNbr");
+      End-If;
+   catch Exception &ex
+   end-try;
+end-method;
+
+
+method setDefaults
+   /+ &pSource as String, +/
+   /+ &pGroup as String, +/
+   /+ &pSubGroup as String +/
+   Local array of string &lSrcParts;
+   
+   /* initialise with default values - in case not specififed */
+   %This.source = "src_" | %OperatorId;
+   %This.group = "grp_" | %OperatorId;
+   %This.subgroup = "subgrp_" | %OperatorId;
+   
+   If All(&pGroup) Then
+      %This.group = Substring(&pGroup, 1, 254);
+      If All(&pSubGroup) Then
+         %This.subgroup = Substring(&pSubGroup, 1, 254);
+      End-If;
+   Else
+      If All(&pSource) Then
+         &lSrcParts = Split(&pSource, ":");
+         If &lSrcParts.Len > 1 Then
+            %This.source = Substring(&lSrcParts [1], 1, 254);
+            %This.group = Substring(&lSrcParts [2], 1, 254);
+            If &lSrcParts.Len > 2 Then
+               %This.subgroup = Substring(&lSrcParts [3], 1, 254);
+            End-If;
+         Else
+            %This.source = Substring(&pSource, 1, 254);
+         End-If;
+      End-If;
+   End-If;
+   
+   %This.guid = "0";
+   %This.sessionid = "0";
+   %This.operator = %OperatorId;
+   
+end-method;
+
+method executeHooks
+   /+ &pHooksArray as Array2 of Any, +/
+   /+ &pMsgStr as String +/
+   Local integer &hookIndex;
+   Local any &result;
+   Local boolean &blockedResultFlag = False;
+   
+   If &pHooksArray.Len > 0 Then
+      For &hookIndex = 1 To &pHooksArray.Len
+         If &pHooksArray [&hookIndex].Len = 2 Then
+            &result = ObjectDoMethod(&pHooksArray [&hookIndex][1], &pHooksArray [&hookIndex][2], &pMsgStr);
+            If All(&result) Then
+               try
+                  If &result = False Or
+                        None(&result) Then
+                     &blockedResultFlag = True;
+                  End-If;
+               catch Exception &ex
+               end-try;
+            End-If;
+            %This.blocked = (%This.blocked And
+               &blockedResultFlag);
+         End-If;
+      End-For;
+   End-If;
+end-method;
+

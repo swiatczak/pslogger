@@ -1,0 +1,117 @@
+import LOGGER:BaseDBLogger;
+import UTILITIES:TextUtils;
+
+class IBDBLogger extends LOGGER:BaseDBLogger;
+   method IBDBLogger(&pSrc As string, &pGrp As string, &pSubGrp As string, &pMarkerStr As string);
+   
+   method logMsg(&msg As Message, &pIncludeProperties As boolean);
+   method logSessionMsgs(&session As ApiObject);
+   method logOriginalXML(&pService_name As string, &pOperation_name As string, &pTransactionId As string);
+private
+   instance UTILITIES:TextUtils &txtUtils;
+end-class;
+
+method IBDBLogger
+   /+ &pSrc as String, +/
+   /+ &pGrp as String, +/
+   /+ &pSubGrp as String, +/
+   /+ &pMarkerStr as String +/
+   %Super = create LOGGER:BaseDBLogger(&pSrc, &pGrp, &pSubGrp, &pMarkerStr);
+end-method;
+
+method logMsg
+   /+ &msg as Message, +/
+   /+ &pIncludeProperties as Boolean +/
+   Local string &str;
+   Local XmlDoc &msgDoc;
+   Local number &I;
+   If &msg <> Null Then
+      If &txtUtils = Null Then
+         &txtUtils = create UTILITIES:TextUtils();
+      End-If;
+      
+      &msgDoc = &msg.GetXmlDoc();
+      If &msgDoc <> Null Then
+         &str = &msgDoc.GenFormattedXmlString();
+      End-If;
+      If All(&str) Then
+         %This.writeLog(&str);
+      Else
+         %This.writeLog(" empty message or no data found ");
+      End-If;
+      
+      If &pIncludeProperties Then
+         %This.writeLog("Message IBInfo: [" | &msg.IBInfo.IBConnectorInfo.GetNumberOfConnectorProperties() | "]");
+         For &I = 1 To &msg.IBInfo.IBConnectorInfo.GetNumberOfConnectorProperties();
+            /* do processing */
+            %This.writeLog(&msg.IBInfo.IBConnectorInfo.GetConnectorPropertiesName(&I) | "=" | &msg.IBInfo.IBConnectorInfo.GetConnectorPropertiesValue(&I));
+         End-For;
+      End-If;
+   End-If;
+end-method;
+
+method logSessionMsgs
+   /+ &session as ApiObject +/
+   Local ApiObject &sMsg = &session.PSMessages;
+   Local number &i;
+   If &sMsg.Count > 0 Then
+      If &txtUtils = Null Then
+         &txtUtils = create UTILITIES:TextUtils();
+      End-If;
+      
+      %This.writeLog("Session Errors/Warnings: [" | &sMsg.count | "]");
+      For &i = 1 To &sMsg.Count
+         %This.writeLog(" MSG:" | Value(&sMsg.Item(&i).Type) | " [" | &sMsg.Item(&i).Text | " :::: " | &sMsg.Item(&i).ExplainText | "]");
+      End-For;
+   End-If;
+end-method;
+
+method logOriginalXML
+   /+ &pService_name as String, +/
+   /+ &pOperation_name as String, +/
+   /+ &pTransactionId as String +/
+   Local string &ibMsg;
+   Local string &found;
+   Local SQL &sql;
+   /* store filter strings as we will mostl likely modify them below */
+   Local string &tmpGroup = %This.group;
+   Local string &tmpSubGroup = %This.subgroup;
+   Local string &tmpGuid = %This.guid;
+   
+   If (All(&pTransactionId)) Then
+      &sql = CreateSQL("SELECT 'X' FROM PSIBLOGDATA WHERE GUID=:1 AND LOGTYPE='1'", &pTransactionId);
+      If (&sql.Fetch(&found)) Then
+         %This.guid = &pTransactionId;
+         %This.group = &pService_name;
+         
+         &ibMsg = %IntBroker.GetSyncLogData(&pTransactionId, %Sync_RequestOrig, False);
+         If All(&ibMsg) Then
+            %This.subgroup = &pOperation_name | " [REQ]";
+            %This.writeLog(&ibMsg);
+         End-If;
+         &ibMsg = %IntBroker.GetSyncLogData(&pTransactionId, %Sync_RequestTrans, False);
+         If All(&ibMsg) Then
+            %This.subgroup = &pOperation_name | " [TR_REQ]";
+            %This.writeLog(&ibMsg);
+         End-If;
+         &ibMsg = %IntBroker.GetSyncLogData(&pTransactionId, %Sync_ResponseOrig, False);
+         If All(&ibMsg) Then
+            %This.subgroup = &pOperation_name | " [RESP]";
+            %This.writeLog(&ibMsg);
+         End-If;
+         
+         &ibMsg = %IntBroker.GetSyncLogData(&pTransactionId, %Sync_ResponseTrans, False);
+         If All(&ibMsg) Then
+            %This.subgroup = &pOperation_name | " [TR_RESP]";
+            %This.writeLog(&ibMsg);
+         End-If;
+         
+      End-If;
+   End-If;
+   
+   /* revert filter strings to their original values */
+   %This.group = &tmpGroup;
+   %This.subgroup = &tmpSubGroup;
+   %This.guid = &tmpGuid;
+end-method;
+

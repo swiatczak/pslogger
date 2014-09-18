@@ -1,0 +1,74 @@
+import LOGGER:BaseDBLogger;
+import UTILITIES:TextUtils;
+
+class ObjectDBLogger extends LOGGER:BaseDBLogger;
+   method ObjectDBLogger(&pSrc As string, &pGrp As string, &pSubGrp As string, &pMarkerStr As string);
+   
+   method logObject(&obj As object);
+   method logArray(&arr As object, &lvl As string);
+   method logTrace(&pException As Exception);
+   
+private
+   instance UTILITIES:TextUtils &txtUtils;
+end-class;
+
+method ObjectDBLogger
+   /+ &pSrc as String, +/
+   /+ &pGrp as String, +/
+   /+ &pSubGrp as String, +/
+   /+ &pMarkerStr as String +/
+   %Super = create LOGGER:BaseDBLogger(&pSrc, &pGrp, &pSubGrp, &pMarkerStr);
+end-method;
+
+method logObject
+   /+ &obj as Object +/
+   
+   If &txtUtils = Null Then
+      &txtUtils = create UTILITIES:TextUtils();
+   End-If;
+   /* naively conveet object to string and write to the database */
+   %This.writeLog(String(&obj));
+end-method;
+
+method logArray
+   /+ &arr as Object, +/
+   /+ &lvl as String +/
+   Local number &dim;
+   Local number &i;
+   Local string &tmpSubGroup = %This.subgroup;
+   try
+      &dim = &arr.Dimension;
+      If &dim > 1 Then
+         For &i = 1 To &arr.len
+            If &lvl <> "" Then
+               %This.logArray(&arr.get(&i), &lvl | ", " | String(&i));
+            Else
+               %This.logArray(&arr.get(&i), String(&i));
+            End-If;
+         End-For;
+      Else
+         %This.subgroup = "array[" | &lvl | "]";
+         %This.writeLog(&arr.Join(",", "[", "]"));
+      End-If;
+   catch Exception &ex
+      %This.subgroup = " exception in logArray";
+      %This.writeLog(&ex.ToString());
+   end-try;
+   %This.subgroup = &tmpSubGroup;
+end-method;
+
+method logTrace
+   /+ &pException as Exception +/
+   Local number &i;
+   Local string &pfx = "";
+   Local array of string &errorArr;
+   
+   &errorArr = Split(&pException.StackTrace, "Called from:");
+   If &errorArr.Len > 0 Then
+      %This.writeLog(" Error Trace [" | &errorArr.Len | "] lines. ");
+      For &i = 1 To &errorArr.Len
+         %This.writeLog(&errorArr [&i]);
+      End-For;
+   End-If;
+end-method;
+

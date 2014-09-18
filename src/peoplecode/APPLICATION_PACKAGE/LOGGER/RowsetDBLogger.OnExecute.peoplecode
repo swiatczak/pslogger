@@ -1,0 +1,40 @@
+import LOGGER:BaseDBLogger;
+import UTILITIES:TextUtils;
+
+class RowsetDBLogger extends LOGGER:BaseDBLogger;
+   method RowsetDBLogger(&pSrc As string, &pGrp As string, &pSubGrp As string, &pMarkerStr As string);
+   
+   method logRs(&rs As Rowset);
+   method logRecord(&rec As Record);
+private
+   instance UTILITIES:TextUtils &txtUtils;
+end-class;
+
+method RowsetDBLogger
+   /+ &pSrc as String, +/
+   /+ &pGrp as String, +/
+   /+ &pSubGrp as String, +/
+   /+ &pMarkerStr as String +/
+   %Super = create LOGGER:BaseDBLogger(&pSrc, &pGrp, &pSubGrp, &pMarkerStr);
+end-method;
+
+method logRs
+   /+ &rs as Rowset +/
+   
+   If &txtUtils = Null Then
+      &txtUtils = create UTILITIES:TextUtils();
+   End-If;
+   
+   %This.writeLog(&txtUtils.rowsetToString(&rs));
+end-method;
+
+method logRecord
+   /+ &rec as Record +/
+   
+   If &txtUtils = Null Then
+      &txtUtils = create UTILITIES:TextUtils();
+   End-If;
+   
+   %This.writeLog(&txtUtils.recordToString(&rec, ""));
+end-method;
+
