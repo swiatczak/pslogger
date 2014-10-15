@@ -63,6 +63,8 @@ method logSessionMsgs
       For &i = 1 To &sMsg.Count
          %This.writeLog(" MSG:" | Value(&sMsg.Item(&i).Type) | " [" | &sMsg.Item(&i).Text | " :::: " | &sMsg.Item(&i).ExplainText | "]");
       End-For;
+   Else
+      %This.writeLog(" MSG: No errors");
    End-If;
 end-method;
 

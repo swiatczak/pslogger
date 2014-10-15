@@ -1,0 +1,139 @@
+/* 
+ Component Interface handler 
+ */
+class CI
+   method CI(&pLogger As any);
+   /* access specified path and execute handler function of the supplied 'listener' object */
+   method traverse(&pCi As ApiObject, &pPath As array of string, &pHndlr As any, &pInvertedFlg As boolean) Returns ApiObject;
+   method traverseInfo(&pCi As ApiObject, &pHndlr As any);
+   method log(&pLogMsg As string);
+private
+   instance any &logger;
+end-class;
+
+method CI
+   /+ &pLogger as Any +/
+   If All(&pLogger) Then
+      &logger = &pLogger;
+   Else
+      &logger = Null;
+   End-If;
+end-method;
+
+method log
+   /+ &pLogMsg as String +/
+   If &logger <> Null Then
+      &logger.writeLogLine(&pLogMsg);
+   End-If;
+end-method;
+
+method traverse
+   /+ &pCi as ApiObject, +/
+   /+ &pPath as Array of String, +/
+   /+ &pHndlr as Any, +/
+   /+ &pInvertedFlg as Boolean +/
+   /+ Returns ApiObject +/
+   rem (&pCi as ApiObject, &pPath AS String) ;
+   Local ApiObject &returnValue = &pCi;
+   Local string &nextStep;
+   Local ApiObject &objColl;
+   Local ApiObject &objItem;
+   Local integer &index;
+   Local integer &hndlrIndex;
+   Local boolean &continueFlg = True;
+   Local integer &startIndex = 1;
+   Local integer &endIndex = 1;
+   Local integer &step = 1;
+   
+   If All(&pPath) And
+         &pPath.Len > 0 Then
+      /* if for any reason the path array is in a wrong order - fix that 
+         We need the ROOT to be the last element .
+       */
+      If Upper(&pPath [1]) = "ROOT" And
+            &pPath.Len > 1 Then
+         &pPath.Reverse();
+      End-If;
+      
+      &nextStep = Upper(&pPath.Pop());
+      
+      If All(&nextStep) Then
+         If &nextStep <> "ROOT" Then
+            &objColl = ObjectGetProperty(&pCi, &nextStep);
+            
+            If &pPath.Len = 0 And
+                  None(&pHndlr) Then
+               &returnValue = &objColl;
+            Else
+               try
+                  If All(&objColl) Then
+                     /* process last to first ? */
+                     If &pInvertedFlg = True Then
+                        &startIndex = &objColl.count;
+                        &endIndex = 1;
+                        &step = - 1;
+                     Else
+                        &startIndex = 1;
+                        &endIndex = &objColl.count;
+                        &step = 1;
+                     End-If;
+                     
+                     For &index = &startIndex To &endIndex Step &step
+                        &objItem = &objColl.item(&index);
+                        /* if no more path items we have reached the destination - call handler for each collection item */
+                        If &pPath.Len = 0 Then
+                           &returnValue = &objColl;
+                           /* execute handler.handle method using current item and collection */
+                           If All(&pHndlr) Then
+                              &continueFlg = ObjectDoMethod(&pHndlr, "handle", &objItem, &objColl, &pPath.Join(":"));
+                              If &continueFlg = False Then
+                                 Break;
+                              End-If;
+                           End-If;
+                        Else
+                           &returnValue = %This.traverse(&objItem, &pPath, &pHndlr, &pInvertedFlg);
+                        End-If;
+                     End-For;
+                  End-If;
+               catch Exception &ex
+                  %This.log("Exception:" | &objItem | "  " | &ex.ToString());
+               end-try;
+            End-If;
+         Else
+            /* process items in root */
+            &returnValue = %This.traverse(&pCi, &pPath, &pHndlr, &pInvertedFlg);
+         End-If;
+      End-If;
+   Else
+      &continueFlg = ObjectDoMethod(&pHndlr, "handle", &returnValue, Null, "")
+   End-If;
+   
+   Return &returnValue;
+end-method;
+
+
+method traverseInfo
+   /+ &pCi as ApiObject, +/
+   /+ &pHndlr as Any +/
+   Local ApiObject &infoColl;
+   Local ApiObject &infoItem;
+   Local integer &index;
+   Local boolean &continueFlg = True;
+   If &pHndlr <> Null Then
+      If &pCi <> Null Then
+         &infoColl = &pCi.PropertyInfoCollection;
+         For &index = 1 To &infoColl.count
+            &infoItem = &infoColl.item(&index);
+            &continueFlg = ObjectDoMethod(&pHndlr, "handleInfo", &infoItem, &infoColl);
+            If &continueFlg = False Then
+               Break;
+            End-If;
+            If &infoItem.IsCollection Then
+               %This.traverseInfo(&infoItem, &pHndlr);
+            End-If;
+            
+         End-For;
+      End-If;
+   End-If;
+end-method;
+

@@ -1,7 +1,8 @@
-import LOGGER:BaseDBLogger;
+import LOGGER:ObjectDBLogger;
 import UTILITIES:TextUtils;
+import APIOBJECT:XMLRowset;
 
-class RowsetDBLogger extends LOGGER:BaseDBLogger;
+class RowsetDBLogger extends LOGGER:ObjectDBLogger;
    method RowsetDBLogger(&pSrc As string, &pGrp As string, &pSubGrp As string, &pMarkerStr As string);
    
    method logRs(&rs As Rowset);
@@ -15,7 +16,7 @@ method RowsetDBLogger
    /+ &pGrp as String, +/
    /+ &pSubGrp as String, +/
    /+ &pMarkerStr as String +/
-   %Super = create LOGGER:BaseDBLogger(&pSrc, &pGrp, &pSubGrp, &pMarkerStr);
+   %Super = create LOGGER:ObjectDBLogger(&pSrc, &pGrp, &pSubGrp, &pMarkerStr);
 end-method;
 
 method logRs
@@ -38,3 +39,19 @@ method logRecord
    %This.writeLog(&txtUtils.recordToString(&rec, ""));
 end-method;
 
+method logRecord
+   /+ &rec as Record +/
+   
+   If &txtUtils = Null Then
+      &txtUtils = create UTILITIES:TextUtils();
+   End-If;
+   
+   %This.writeLog(&txtUtils.recordToString(&rec, ""));
+end-method;
+
+method logRSAsXML
+   /+ &rs as Rowset +/
+   Local APIOBJECT:XMLRowset &xmlRs = create APIOBJECT:XMLRowset();
+   %This.logXml(&xmlRs.rsToXML(&rs, True, False), True); /* defined in LOGGER:ObjectDBLogger */
+   
+end-method;

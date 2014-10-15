@@ -3,10 +3,12 @@ import UTILITIES:TextUtils;
 
 class CIDBLogger extends LOGGER:BaseDBLogger;
    method CIDBLogger(&pSrc As string, &pGrp As string, &pSubGrp As string, &pMarkerStr As string);
-   
+      
    method logCI(&ci As ApiObject);
+   method logInfoColl(&pItmInfoColl As ApiObject);
+   method logDataColl(&pItmDataColl As ApiObject, &pItmInfoColl As ApiObject);   
 private
-   instance UTILITIES:TextUtilsUOA &txtUtils;
+   instance UTILITIES:TextUtils &txtUtils;
 end-class;
 
 method CIDBLogger
@@ -19,11 +21,60 @@ end-method;
 
 method logCI
    /+ &ci as ApiObject +/
-   
+   Local boolean &result = True;
    If &txtUtils = Null Then
       &txtUtils = create UTILITIES:TextUtils();
    End-If;
-   
-   %This.writeLog(&txtUtils.ciToString(&ci));
+   Local XmlDoc &doc;
+   Local string &tmpXmlString = &txtUtils.ciToString(&ci);
+   try
+      &doc = CreateXmlDoc();
+      &result = &doc.ParseXmlString(&tmpXmlString);
+      If &result = True Then
+         %This.logXml(&doc, True);
+      Else
+         %This.writeLog("Could not convert CI to XML:" | &tmpXmlString);
+      End-If;
+   catch Exception &exc
+      %This.writeLog("Could not convert CI to XML:" | &tmpXmlString);
+   end-try;
 end-method;
 
+
+method logInfoColl
+   /+ &pItmInfoColl as ApiObject +/
+   Local integer &index;
+   Local ApiObject &tmpItem;
+   
+   If &pItmInfoColl <> Null Then
+      
+      For &index = 1 To &pItmInfoColl.Count
+         
+         &tmpItem = &pItmInfoColl.item(&index);
+         If &tmpItem <> Null Then
+            %This.writeLogLine(" Name:" | &tmpItem.Name | "  isColl:" | &tmpItem.isCollection | "  Key:" | &tmpItem.key | "  LabelShort:" | &tmpItem.LabelShort);
+         Else
+            %This.writeLogLine("item [" | &index | "/" | &pItmInfoColl.Count | "] is null.");
+         End-If;
+      End-For;
+   End-If;
+end-method;
+
+method logDataColl
+   /+ &pItmDataColl as ApiObject, +/
+   /+ &pItmInfoColl as ApiObject +/
+   Local integer &index;
+   Local ApiObject &tmpItem;
+   Local ApiObject &tmpInfoItem;
+   Local integer &infoItmIndex;
+   Local string &logLineStr = "";
+   If &pItmDataColl <> Null Then
+      For &infoItmIndex = 1 To &pItmInfoColl.count
+         &tmpInfoItem = &pItmInfoColl.item(&infoItmIndex);
+         &logLineStr = &logLineStr | "[Name:" | &tmpInfoItem.Name | " Value:" | ObjectGetProperty(&pItmDataColl, &tmpInfoItem.Name) | "],";
+      End-For;
+      %This.writeLog(&logLineStr);
+      &logLineStr = "";
+      
+   End-If;
+end-method;

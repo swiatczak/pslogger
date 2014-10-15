@@ -1,0 +1,171 @@
+class XMLRowset
+   method rsToXML(&pRs As Rowset, &pInclBlank As boolean, &pInclBufOnly As boolean) Returns XmlDoc;
+   
+   method addRsXml(&pRowNode As XmlNode, &pRs As Rowset);
+   method addRowXml(&pRowsNode As XmlNode, &pRow As Row);
+   method addRecXml(&pRowNode As XmlNode, &pRec As Record);
+   method addFieldXml(&pRecNode As XmlNode, &pField As Field);
+   
+   method getRowSetName(&pRs As Rowset) Returns string;
+   method addFlagAsAttribute(&pNode As XmlNode, &pFlgName As string, &pFlg As boolean);
+private
+   instance boolean &incNonBuf;
+   instance boolean &inclBlank;
+end-class;
+
+
+method getRowSetName
+   /+ &pRs as Rowset +/
+   /+ Returns String +/
+   Local string &sRowsetName;
+   
+   &sRowsetName = &pRs.Name;
+   If &sRowsetName = "" Then
+      &sRowsetName = &pRs.DBRecordName;
+      If &sRowsetName = "" Then
+         &sRowsetName = "unknownRS";
+      End-If;
+   End-If;
+   
+   Return &sRowsetName;
+end-method;
+
+method rsToXML
+   /+ &pRs as Rowset, +/
+   /+ &pInclBlank as Boolean, +/
+   /+ &pInclBufOnly as Boolean +/
+   /+ Returns XmlDoc +/
+   Local XmlDoc &returnValue = CreateXmlDoc("<?xml version='1.0'?><root xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance""/>");
+   Local XmlNode &xmlDocNode = &returnValue.DocumentElement;
+   
+   &incNonBuf = &pInclBufOnly;
+   &inclBlank = &pInclBlank;
+   
+   &xmlDocNode.AddAttribute("xsi:noNamespaceSchemaLocation", "http://localhost");
+   %This.addRsXml(&xmlDocNode, &pRs);
+   
+   Return &returnValue;
+end-method;
+
+method addRowXml
+   /+ &pRowsNode as XmlNode, +/
+   /+ &pRow as Row +/
+   Local XmlNode &rowNode;
+   Local integer &recIndex;
+   Local integer &childIndex;
+   
+   If &pRowsNode <> Null And
+         &pRow <> Null Then
+      &rowNode = &pRowsNode.AddElement("row");
+      
+      %This.addFlagAsAttribute(&rowNode, "new", &pRow.IsNew);
+      %This.addFlagAsAttribute(&rowNode, "chan", &pRow.IsChanged);
+      %This.addFlagAsAttribute(&rowNode, "del", &pRow.IsDeleted);
+      %This.addFlagAsAttribute(&rowNode, "err", &pRow.IsEditError);
+      %This.addFlagAsAttribute(&rowNode, "vis", &pRow.Visible);
+      &rowNode.AddAttribute("rnum", String(&pRow.RowNumber));
+      
+      
+      /* records  */
+      If &pRow.RecordCount > 0 Then
+         For &recIndex = 1 To &pRow.RecordCount
+            /* add records */
+            %This.addRecXml(&rowNode, &pRow.GetRecord(&recIndex));
+         End-For;
+      End-If;
+      /* sub-rowset */
+      If &pRow.ChildCount > 0 Then
+         For &childIndex = 1 To &pRow.ChildCount
+            /* add rowset */
+            %This.addRsXml(&rowNode, &pRow.GetRowset(&childIndex));
+         End-For;
+      End-If;
+   End-If;
+end-method;
+
+method addRsXml
+   /+ &pRowNode as XmlNode, +/
+   /+ &pRs as Rowset +/
+   Local XmlNode &rowsetNode;
+   Local XmlNode &rowsNode;
+   Local integer &rowIndex;
+   Local integer &nActiveRowCount;
+   
+   If &pRowNode <> Null And
+         &pRs <> Null Then
+      &rowsetNode = &pRowNode.AddElement("rowset");
+      &rowsetNode.AddAttribute("rowsetname", %This.getRowSetName(&pRs));
+      &rowsNode = &rowsetNode.AddElement("rows");
+      
+      &rowsNode.AddAttribute("numrows", String(&pRs.RowCount));
+      For &rowIndex = 1 To &pRs.RowCount
+         %This.addRowXml(&rowsNode, &pRs.GetRow(&rowIndex));
+      End-For;
+   End-If;
+   
+end-method;
+
+method addFieldXml
+   /+ &pRecNode as XmlNode, +/
+   /+ &pField as Field +/
+   Local XmlNode &childNode;
+   If &pRecNode <> Null And
+         &pField <> Null Then
+      
+      &childNode = &pRecNode.AddElement(&pField.Name);
+      
+      %This.addFlagAsAttribute(&childNode, "dnly", &pField.DisplayOnly);
+      %This.addFlagAsAttribute(&childNode, "err", &pField.EditError);
+      %This.addFlagAsAttribute(&childNode, "key", &pField.IsKey);
+      %This.addFlagAsAttribute(&childNode, "req", &pField.IsRequired);
+      %This.addFlagAsAttribute(&childNode, "chng", &pField.IsChanged);
+      If All(&pField.Value) Then
+         &childNode.NodeValue = &pField.Value;
+      End-If;
+   End-If;
+   
+end-method;
+
+method addRecXml
+   /+ &pRowNode as XmlNode, +/
+   /+ &pRec as Record +/
+   Local XmlNode &recordNode;
+   Local integer &fldIndex;
+   Local integer &fldCount;
+   
+   Local Field &fld;
+   
+   If &pRowNode <> Null And
+         &pRec <> Null Then
+      
+      &recordNode = &pRowNode.AddElement(&pRec.Name);
+      
+      %This.addFlagAsAttribute(&recordNode, "chng", &pRec.IsChanged);
+      %This.addFlagAsAttribute(&recordNode, "del", &pRec.IsDeleted);
+      %This.addFlagAsAttribute(&recordNode, "err", &pRec.IsEditError);
+      try
+         For &fldIndex = 1 To &pRec.FieldCount
+            &fld = &pRec.GetField(&fldIndex);
+            If (All(&fld.Value) Or
+                  &inclBlank) And
+                  (&fld.IsInBuf Or
+                     &incNonBuf) Then
+               %This.addFieldXml(&recordNode, &fld);
+            End-If;
+         End-For;
+      catch Exception &ex
+      end-try;
+   End-If;
+end-method;
+
+
+method addFlagAsAttribute
+   /+ &pNode as XmlNode, +/
+   /+ &pFlgName as String, +/
+   /+ &pFlg as Boolean +/
+   Local string &returnValue = "Y";
+   If &pFlg = True Then
+      &pNode.AddAttribute(&pFlgName, "Y");
+   End-If;
+end-method;
+

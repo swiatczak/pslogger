@@ -7,9 +7,13 @@ class ObjectDBLogger extends LOGGER:BaseDBLogger;
    method logObject(&obj As object);
    method logArray(&arr As object, &lvl As string);
    method logTrace(&pException As Exception);
+   method logXml(&pDoc As any, &pFormatFlg As boolean);
    
 private
    instance UTILITIES:TextUtils &txtUtils;
+
+   Constant &SINGLE_LINE_LIMIT = 3999;
+   Constant &RANGE_LIMIT = 100;
 end-class;
 
 method ObjectDBLogger
@@ -72,3 +76,46 @@ method logTrace
    End-If;
 end-method;
 
+method logXml
+   /+ &pDoc as Any, +/
+   /+ &pFormatFlg as Boolean +/
+   Local string &tmpXmlString = "";
+   Local integer &index;
+   Local integer &strLength;
+   Local string &stageFlag = "START";
+      
+   If &pDoc <> Null Then
+      try
+         
+         If &pFormatFlg = True Then
+            &stageFlag = "FRMTXML";
+            &tmpXmlString = &pDoc.GenFormattedXmlString();
+         Else
+            &stageFlag = "BAREXML";
+            &tmpXmlString = &pDoc.GenXmlString();
+         End-If;
+         
+         While &tmpXmlString <> ""
+            
+            If Len(&tmpXmlString) > &SINGLE_LINE_LIMIT Then
+               &index = Find(">", Substring(&tmpXmlString, 1, &SINGLE_LINE_LIMIT), &SINGLE_LINE_LIMIT - &RANGE_LIMIT);
+               If &index <= 0 Then
+                  &index = &SINGLE_LINE_LIMIT;
+               End-If;
+               %This.writeLogLine(Substring(&tmpXmlString, 1, &index));
+               &tmpXmlString = Substring(&tmpXmlString, &index + 1, Len(&tmpXmlString))
+            Else
+               %This.writeLogLine(&tmpXmlString);
+               &tmpXmlString = "";
+            End-If;
+            
+         End-While;
+      catch Exception &ex
+         %This.writeLog("Possibly not a SOAP/XML document. [" | &stageFlag | "]");
+         %This.logTrace(&ex);
+      end-try;
+   Else
+      %This.writeLogLine("XML DOC is null. ");
+   End-If;
+   
+end-method;

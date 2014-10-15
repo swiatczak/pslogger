@@ -1,0 +1,95 @@
+/* provide constant time associative array of strings - technically should improve performance by reducing 
+   the number of calls to array.find() normally used in delivered hash map libraries.
+   */
+class StringHashMap
+   method StringHashMap();
+   method add(&pKey As string, &pValue As string);
+   method getVal(&pKey As string) Returns string;
+   method remove(&pKey As string);
+   method hasKey(&pKey As string) Returns boolean;
+   
+   method clear();
+   method finalize();
+   
+   method keys() Returns array of string;
+   method values() Returns array of string;
+private
+   instance JavaObject &jHashMap;
+end-class;
+
+method StringHashMap
+   
+   &jHashMap = CreateJavaObject("java.util.HashMap");
+   
+end-method;
+
+method add
+   /+ &pKey as String, +/
+   /+ &pValue as String +/
+   If &jHashMap <> Null Then
+      If All(&pKey) Then
+         &jHashMap.put(&pKey, &pValue);
+      End-If;
+   End-If;
+end-method;
+
+method remove
+   /+ &pKey as String +/
+   If %This.hasKey(&pKey) Then
+      &jHashMap.remove(&pKey);
+   End-If;
+end-method;
+
+method hasKey
+   /+ &pKey as String +/
+   /+ Returns Boolean +/
+   Local boolean &returnValue;
+   If &jHashMap <> Null Then
+      &returnValue = &jHashMap.containsKey(&pKey);
+   End-If;
+   Return &returnValue;
+end-method;
+
+method getVal
+   /+ &pKey as String +/
+   /+ Returns String +/
+   Local string &returnValue;
+   
+   If &jHashMap <> Null Then
+      
+      
+      If %This.hasKey(&pKey) Then
+         &returnValue = &jHashMap.get(&pKey).toString();
+      End-If;
+   End-If;
+   Return &returnValue;
+end-method;
+
+method keys
+   /+ Returns Array of String +/
+   Local array of string &returnValue = Null;
+   If &jHashMap <> Null Then
+      &returnValue = &jHashMap.keys();
+   End-If;
+   Return &returnValue;
+end-method;
+
+method values
+   /+ Returns Array of String +/
+   Local array of string &returnValue = Null;
+   If &jHashMap <> Null Then
+      &returnValue = &jHashMap.values();
+   End-If;
+   Return &returnValue;
+end-method;
+
+method clear
+   If &jHashMap <> Null Then
+      &jHashMap.clear();
+   End-If;
+end-method;
+
+method finalize
+   &jHashMap = Null;
+end-method;
+
