@@ -132,6 +132,8 @@ method setDefaults
    %This.subgroup = "subgrp_" | %OperatorId;
    
    If All(&pGroup) Then
+      /* use the source parameter if group is provided */
+      %This.source = &pSource;
       %This.group = Substring(&pGroup, 1, 254);
       If All(&pSubGroup) Then
          %This.subgroup = Substring(&pSubGroup, 1, 254);
